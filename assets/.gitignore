@@ -1,0 +1,19 @@
+# 1. .gitignore에 무시 항목 추가 (없다면 새로 만들고, 있으면 아래 항목들이 들어가 있는지 확인)
+cat <<EOF >> .gitignore
+# 가상환경
+venv/
+
+# 파이썬 캐시 등
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 환경 변수 파일
+.env
+EOF
+
+# 2. 이미 트래킹된 venv 내용을 Git 인덱스에서 제거 (파일은 삭제되지 않음)
+git rm -r --cached venv/
+
+# 3. .gitignore 스테이징
+git add .gitignore

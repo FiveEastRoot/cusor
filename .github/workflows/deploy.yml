@@ -1,0 +1,36 @@
+name: Deploy to Streamlit Cloud
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests (if any)
+      run: |
+        # 여기에 테스트 명령어를 추가하세요
+        echo "테스트가 없습니다. 필요시 여기에 테스트를 추가하세요."
+    
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # flake8을 실행하되 0이 아닌 종료 코드는 허용
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
