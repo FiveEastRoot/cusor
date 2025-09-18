@@ -27,12 +27,22 @@ cd [repository-name]
 pip install -r requirements.txt
 ```
 
-3. 앱을 실행합니다:
+3. OpenAI API 키를 설정합니다:
+   - `.streamlit/secrets.toml` 파일을 생성합니다
+   - `secrets.toml.example`을 참고하여 API 키를 설정합니다
+   ```toml
+   [openai]
+   api_key = "your-openai-api-key-here"
+   ```
+
+4. 앱을 실행합니다:
 ```bash
 streamlit run main.py
 ```
 
-4. 브라우저에서 `http://localhost:8501`로 접속합니다.
+5. 브라우저에서 `http://localhost:8501`로 접속합니다.
+
+**참고**: OpenAI API 키가 없어도 기본 분석 기능은 사용할 수 있습니다. AI 기능을 사용하려면 API 키가 필요합니다.
 
 ### Streamlit Cloud에서 배포
 
@@ -40,7 +50,16 @@ streamlit run main.py
 2. [Streamlit Cloud](https://share.streamlit.io/)에 접속합니다.
 3. "New app"을 클릭하고 GitHub 저장소를 연결합니다.
 4. 메인 파일 경로를 `main.py`로 설정합니다.
-5. "Deploy"를 클릭합니다.
+5. **Secrets 설정**:
+   - "Advanced settings"에서 "Secrets" 섹션을 찾습니다
+   - 다음 내용을 추가합니다:
+   ```toml
+   [openai]
+   api_key = "your-openai-api-key-here"
+   ```
+6. "Deploy"를 클릭합니다.
+
+**참고**: OpenAI API 키를 설정하지 않으면 AI 기능은 사용할 수 없지만, 기본 분석 기능은 정상적으로 작동합니다.
 
 ## 📁 프로젝트 구조
 

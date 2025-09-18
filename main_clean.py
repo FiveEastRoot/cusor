@@ -45,14 +45,8 @@ from itertools import cycle
 logging.basicConfig(level=logging.INFO)
 
 # OpenAI API 설정
-try:
-    openai.api_key = st.secrets["openai"]["api_key"]
-    client = openai.OpenAI(api_key=openai.api_key)
-    OPENAI_AVAILABLE = True
-except KeyError:
-    st.warning("⚠️ OpenAI API 키가 설정되지 않았습니다. AI 기능을 사용하려면 API 키를 설정해주세요.")
-    OPENAI_AVAILABLE = False
-    client = None
+openai.api_key = st.secrets["openai"]["api_key"]
+client = openai.OpenAI(api_key=openai.api_key)
 
 # 기본 색상 팔레트 설정
 DEFAULT_PALETTE = px.colors.qualitative.Plotly
@@ -100,9 +94,6 @@ def safe_chat_completion(*, model="gpt-4.1-nano", messages, temperature=0.2, max
     - 재시도 로직과 백오프 전략을 포함하여 API 호출 실패에 대비
     - 네트워크 오류나 API 제한에 대한 복원력 제공
     """
-    if not OPENAI_AVAILABLE or client is None:
-        raise Exception("OpenAI API가 사용할 수 없습니다. API 키를 설정해주세요.")
-    
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
