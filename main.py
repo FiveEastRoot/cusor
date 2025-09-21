@@ -320,8 +320,86 @@ def is_trivial(text):
     return text in ["", "X", "x", "감사합니다", "감사", "없음"]
 
 def split_keywords_simple(text):
-    parts = re.split(r"[.,/\s]+", text)
-    return [p.strip() for p in parts if len(p.strip()) > 1]
+    """
+    간단 키워드 분할 함수(강건화된 토큰화 적용)
+    
+    기능:
+    - 쉼표/점/공백 기반 분할 대신 정규화·불용어 제거·동의어 매핑을 적용
+    - 한글/영문/숫자 위주로 정제하여 노이즈 감소
+    
+    사용처:
+    - extract_keyword_and_audience()의 fallback 처리
+    - 자유응답에서 키워드 후보 추출
+    """
+    return _robust_keywords_from_text(text)
+
+# 키워드 정규화/불용어/동의어 테이블
+KO_STOPWORDS = {
+    "그리고","또는","등","및","관련","대해","부분","정도","때문","이번","개선","필요","서비스",
+    "사용","이용","제공","하는","있는","있는지","있는가","하는지","해주세요","합니다","했다","했다가",
+}
+
+SYNONYM_MAP = {
+    "직원 친절": "직원", "직원 응대": "직원", "응대": "직원", "사서": "직원",
+    "시설 청결": "청결", "깨끗": "청결", "위생": "청결",
+    "프로그램 다양성": "프로그램", "강좌": "프로그램", "행사": "프로그램",
+    "자료 접근성": "접근성", "접근": "접근성",
+}
+
+def _normalize_token(token: str) -> str:
+    """
+    단일 토큰 정규화: 특수문자 제거, 소문자화, 동의어 매핑
+    """
+    token = re.sub(r"[\[\](){}+\-•·∙・~*\"'“”‘’`’.,!?/:;_|]", " ", token)
+    token = re.sub(r"\s+", " ", token).strip().lower()
+    token = re.sub(r"[^0-9a-zA-Z\uac00-\ud7a3 ]", " ", token).strip()
+    if token in SYNONYM_MAP:
+        token = SYNONYM_MAP[token]
+    return token
+
+def _robust_parse_list(text: str) -> list:
+    """
+    LLM 출력이 자유형식일 때도 키워드 리스트로 변환
+    - JSON 배열/객체 시도 → 실패 시 불릿/쉼표/줄바꿈 분해
+    - 정규화/불용어 제거 적용
+    """
+    # JSON 파싱 시도
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            items = [str(x) for x in data]
+        elif isinstance(data, dict) and "keywords" in data:
+            items = [str(x) for x in data["keywords"]]
+        else:
+            items = []
+    except Exception:
+        items = []
+    if not items:
+        parts = re.split(r"[\n\r]|[,;]|(?:^|\s)[\-•·∙・]\s+", text)
+        items = [p for p in parts if p]
+    out: list[str] = []
+    for p in items:
+        t = _normalize_token(p)
+        if len(t) >= 2 and t not in KO_STOPWORDS:
+            out.append(t)
+    return [x for x in out if x]
+
+def _robust_keywords_from_text(text: str) -> list[str]:
+    """단일 텍스트에서 강건하게 키워드 리스트를 추출."""
+    tokens = _robust_parse_list(text)
+    # 공백 분해 추가 적용
+    more = []
+    for t in list(tokens):
+        more.extend([_normalize_token(x) for x in t.split()])
+    tokens.extend(more)
+    # 중복 제거, 빈 제거
+    uniq = []
+    seen = set()
+    for t in tokens:
+        if t and t not in seen:
+            seen.add(t)
+            uniq.append(t)
+    return uniq
 
 def map_keyword_to_category(keyword):
     for cat, kws in KDC_KEYWORD_MAP.items():
@@ -903,12 +981,14 @@ def process_answers(responses):
             expanded.append(ans)
 
     processed = []
-    batches = extract_keyword_and_audience(expanded, batch_size=8)
+    # 배치 크기 상향 및 캐시 활용 버전 사용
+    batches = extract_keyword_and_audience(expanded, batch_size=32)
     for resp, kws, aud in batches:
         if is_trivial(resp):
             continue
         if not kws:
-            kws = split_keywords_simple(resp)
+            # 강건 토큰화로 대체
+            kws = _robust_keywords_from_text(resp)
         for kw in kws:
             cat = map_keyword_to_category(kw)
             if cat == '해당없음' and aud == '일반':
@@ -922,7 +1002,7 @@ def process_answers(responses):
     return pd.DataFrame(processed)
 
 @st.cache_data(show_spinner=False)
-def extract_keyword_and_audience(responses, batch_size=20):
+def extract_keyword_and_audience(responses, batch_size=32):
     results = []
     for i in range(0, len(responses), batch_size):
         batch = responses[i:i+batch_size]
@@ -940,22 +1020,55 @@ def extract_keyword_and_audience(responses, batch_size=20):
 {chr(10).join(f"{j+1}. {txt}" for j, txt in enumerate(batch))}
 """
         try:
-            resp = safe_chat_completion(
-                model="gpt-4.1",
-                messages=[{"role": "system", "content": prompt}],
-                temperature=0.2,
-                max_tokens=300
-            )
-            content = resp.choices[0].message.content.strip()
+            # 캐시 기반 LLM 호출(콜드 스타트만 지연)
+            key = hashlib.sha256(("gpt-4.1" + prompt).encode()).hexdigest()
+            if "_llm_cache" not in st.session_state:
+                st.session_state["_llm_cache"] = {}
+            if key in st.session_state["_llm_cache"]:
+                content = st.session_state["_llm_cache"][key]
+            else:
+                resp = safe_chat_completion(
+                    model="gpt-4.1",
+                    messages=[{"role": "system", "content": prompt}],
+                    temperature=0.2,
+                    max_tokens=300,
+                    retries=1,
+                    backoff_base=0.5,
+                )
+                content = resp.choices[0].message.content.strip()
+                st.session_state["_llm_cache"][key] = content
+
+            # 1차: JSON 파싱 시도
             try:
                 data = pd.read_json(content)
             except Exception:
-                raise ValueError("JSON 파싱 실패, fallback으로 전환")
+                # 2차: 강건 파싱으로 키워드/대상 근사 추출
+                rows = []
+                parsed_list = _robust_parse_list(content)
+                # content가 키워드 나열일 수 있으므로 배치 텍스트별 근사 생성
+                for txt in batch:
+                    kws = _robust_keywords_from_text(txt)
+                    # 간단 대상 분류 규칙(기존 유지)
+                    audience = '일반'
+                    for w in ['어린이', '초등']:
+                        if w in txt:
+                            audience = '아동'
+                    for w in ['유아', '미취학', '그림책']:
+                        if w in txt:
+                            audience = '유아'
+                    for w in ['청소년', '진로', '자기계발']:
+                        if w in txt:
+                            audience = '청소년'
+                    # LLM 응답에서 공통 키워드가 있으면 가중 반영
+                    if parsed_list:
+                        kws = list(dict.fromkeys(kws + parsed_list))
+                    rows.append({'response': txt, 'keywords': kws[:3], 'audience': audience})
+                data = pd.DataFrame(rows)
         except Exception:
-            # fallback
-            data = []
+            # 최종 fallback: 전통식 TF 기반
+            rows = []
             for txt in batch:
-                kws = split_keywords_simple(txt)
+                kws = _robust_keywords_from_text(txt)[:3]
                 audience = '일반'
                 for w in ['어린이', '초등']:
                     if w in txt:
@@ -966,12 +1079,8 @@ def extract_keyword_and_audience(responses, batch_size=20):
                 for w in ['청소년', '진로', '자기계발']:
                     if w in txt:
                         audience = '청소년'
-                data.append({
-                    'response': txt,
-                    'keywords': kws,
-                    'audience': audience
-                })
-            data = pd.DataFrame(data)
+                rows.append({'response': txt, 'keywords': kws, 'audience': audience})
+            data = pd.DataFrame(rows)
         for _, row in data.iterrows():
             results.append((row['response'], row['keywords'], row['audience']))
     return results
