@@ -425,6 +425,31 @@ def safe_markdown(text, **kwargs):
     safe = escape_tildes(text, mode="markdown")
     st.markdown(safe, **kwargs)
 
+def demote_headings(text: str) -> str:
+    """
+    GPT가 생성한 마크다운 헤딩(###, ##, #)을 굵은 텍스트로 강등하여
+    카드 내에서 과도하게 큰 헤더가 표시되지 않도록 조정.
+    """
+    if not text:
+        return text
+    # 줄 단위로 처리
+    lines = str(text).splitlines()
+    out = []
+    for ln in lines:
+        # 선행 헤딩 토큰 제거 후 굵게 처리
+        m3 = re.match(r"^\s*###\s+(.*)$", ln)
+        m2 = re.match(r"^\s*##\s+(.*)$", ln)
+        m1 = re.match(r"^\s*#\s+(.*)$", ln)
+        if m3:
+            out.append(f"**{m3.group(1).strip()}**")
+        elif m2:
+            out.append(f"**{m2.group(1).strip()}**")
+        elif m1:
+            out.append(f"**{m1.group(1).strip()}**")
+        else:
+            out.append(ln)
+    return "\n".join(out)
+
 def build_common_overall_insight_prompt(midcat_scores: dict, within_deviations: dict, abc_df: pd.DataFrame) -> str:
     midcat_str = ", ".join(f"{k} {v:.1f}" for k, v in midcat_scores.items())
     strengths = []
@@ -2890,7 +2915,8 @@ def page_segment_analysis(df):
     delta_df_for_prompt = group_means.set_index("조합")
     prompt_delta = build_delta_prompt(delta_df_for_prompt, midcats)
     delta_insight = call_gpt_for_insight(prompt_delta)
-    delta_insight = delta_insight.replace("~", "-")
+    # 헤딩 강등 및 취소선 방지
+    delta_insight = demote_headings(delta_insight).replace("~", "-")
     render_insight_card("GPT 생성형 해석 (델타 히트맵)", delta_insight, key="delta-heatmap-insight")
 
 #신뢰구간 포함 편차 바 차트 해석
@@ -2939,6 +2965,7 @@ def page_segment_analysis(df):
 
         prompt_ci = build_ci_prompt(subset_local, mc)
         ci_insight = call_gpt_for_insight(prompt_ci)
+        ci_insight = demote_headings(ci_insight).replace("~", "-")
         render_insight_card("GPT 생성형 해석 (신뢰구간)", ci_insight, key=f"ci-insight-{mc}")
 
 
