@@ -69,9 +69,17 @@ COLOR_CYCLER = cycle(DEFAULT_PALETTE)
 def safe_chat_completion(*, model="gpt-4.1-nano", messages, temperature=0.2, max_tokens=300, retries=3, backoff_base=1.0):
     """
     OpenAI API 호출을 안전하게 처리하는 함수
+    
+    기능:
     - 재시도 로직과 백오프 전략을 포함하여 API 호출 실패에 대비
     - 네트워크 오류나 API 제한에 대한 복원력 제공
     - AI 인사이트 생성 및 텍스트 분석에 사용
+    
+    사용처:
+    - call_gpt_for_insight(): 전략 인사이트 생성
+    - extract_keyword_and_audience(): 키워드 및 대상 추출
+    - extract_theme_table_long(): 주제 분석
+    - extract_sentiment_table_long(): 감정 분석
     """
     if not OPENAI_AVAILABLE or client is None:
         raise Exception("OpenAI API가 사용할 수 없습니다. API 키를 설정해주세요.")
@@ -100,10 +108,17 @@ def safe_chat_completion(*, model="gpt-4.1-nano", messages, temperature=0.2, max
 
 def interpret_midcategory_scores(df):
     """
-    중분류 점수를 해석하여 사용자에게 의미있는 정보를 제공
+    중분류 점수를 해석하여 사용자에게 의미있는 정보를 제공하는 함수
+    
+    기능:
     - 전체 평균 대비 높은/낮은 중분류를 식별
     - 사용자 친화적인 해석 텍스트 생성
     - 도서관 서비스 강약점 파악에 활용
+    
+    사용처:
+    - page_basic_vis(): 기본 시각화 페이지에서 점수 해석 표시
+    - 강약점 분석 탭에서 중분류별 성과 해석
+    - AI 인사이트 생성 시 참고 데이터로 활용
     """
     scores = compute_midcategory_scores(df)
     if scores.empty:
@@ -126,10 +141,18 @@ import re
 
 def extract_question_code(col_name: str) -> str:
     """
-    컬럼명에서 문항 코드/번호만 추출
+    컬럼명에서 문항 코드/번호만 추출하는 함수
+    
+    기능:
     - 'Q1-1. 공간 만족도' -> 'Q1-1' 형태로 변환
     - 설문 문항 식별을 위한 표준화 함수
     - 차트 라벨링 및 분석에 활용
+    
+    사용처:
+    - get_questions_used(): 자연어 질의에서 사용된 문항 추출
+    - 차트 생성 시 라벨 정리
+    - 문항별 분석 결과 정리
+    - 데이터 전처리 과정
     """
     m = re.match(r'^([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)', col_name.strip())
     if m:
@@ -221,16 +244,52 @@ def get_questions_used(spec: dict, df_full: pd.DataFrame, df_subset: pd.DataFram
 
 def remove_parentheses(text):
     """
-    텍스트에서 괄호와 그 내용을 제거
+    텍스트에서 괄호와 그 내용을 제거하는 함수
+    
+    기능:
+    - 괄호 안의 내용을 포함하여 완전히 제거
     - 차트 라벨 정리 시 사용
     - 깔끔한 시각화를 위한 텍스트 정제
+    
+    사용처:
+    - 차트 생성 시 라벨 정리
+    - 텍스트 분석 전 데이터 전처리
+    - 키워드 추출 시 불필요한 정보 제거
+    - 사용자 응답 정제
     """
     return re.sub(r'\(.*?\)', '', text).strip()
 
 def wrap_label(label, width=10):
+    """
+    라벨을 지정된 너비로 줄바꿈하는 함수
+    
+    기능:
+    - 긴 라벨을 여러 줄로 분할
+    - HTML <br> 태그를 사용하여 줄바꿈
+    - 차트의 가독성 향상
+    
+    사용처:
+    - 차트 생성 시 긴 라벨 처리
+    - 테이블 헤더 정리
+    - 시각화 요소의 텍스트 정리
+    """
     return '<br>'.join([label[i:i+width] for i in range(0, len(label), width)])
 
 def get_qualitative_colors(n):
+    """
+    질적 데이터용 색상 팔레트를 생성하는 함수
+    
+    기능:
+    - n개의 서로 다른 색상을 반환
+    - Plotly의 기본 색상 팔레트 사용
+    - 차트에서 카테고리별 색상 구분
+    
+    사용처:
+    - 막대 차트, 파이 차트 등에서 카테고리별 색상 지정
+    - 세그먼트 분석 차트
+    - 그룹별 비교 시각화
+    - 범례 색상 매핑
+    """
     palette = DEFAULT_PALETTE
     return [c for _, c in zip(range(n), cycle(palette))]
 
@@ -541,6 +600,20 @@ def render_insight_card(title: str, content: str, key: str = None):
 # 이 섹션은 통계 분석, 점수 계산, 그룹 비교 등의 핵심 분석 함수들을 포함합니다.
 
 def scale_likert(series):
+    """
+    리커트 척도 데이터를 0-100 점수로 변환하는 함수
+    
+    기능:
+    - 1-7점 척도를 0-100점으로 표준화
+    - 통계 분석을 위한 수치 변환
+    - 만족도 점수 계산의 기준
+    
+    사용처:
+    - compute_midcategory_scores(): 중분류 점수 계산
+    - compute_within_category_item_scores(): 개별 문항 점수 계산
+    - 모든 만족도 분석의 기본 함수
+    - 통계 분석 및 비교 분석
+    """
     return 100 * (pd.to_numeric(series, errors='coerce') - 1) / 6
 
 MIDDLE_CATEGORY_MAPPING = {
@@ -555,6 +628,21 @@ MIDDLE_CATEGORY_MAPPING = {
 
 @st.cache_data(show_spinner=False)
 def compute_midcategory_scores(df):
+    """
+    중분류별 평균 점수를 계산하는 핵심 함수
+    
+    기능:
+    - 각 중분류에 속하는 문항들의 평균 점수 계산
+    - 리커트 척도를 0-100점으로 변환하여 계산
+    - 전체 만족도 평가의 기준이 되는 핵심 함수
+    
+    사용처:
+    - interpret_midcategory_scores(): 점수 해석
+    - plot_midcategory_radar(): 레이더 차트 생성
+    - midcategory_avg_table(): 평균 점수 테이블 생성
+    - AI 인사이트 생성의 기본 데이터
+    - 모든 중분류 분석의 기초
+    """
     results = {}
     for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
         cols = [c for c in df.columns if predicate(c)]
@@ -2277,6 +2365,18 @@ def plot_pair_bar(df, prefix):
 # 이 섹션은 각 분석 페이지의 주요 기능을 담당하는 함수들을 포함합니다.
 
 def page_home(df):
+    """
+    홈페이지 - 응답자 기본 정보 및 인구통계 분석 페이지
+    
+    기능:
+    - 인구통계 문항 (SQ1~5, BQ1~2) 시각화
+    - 응답자 기본 정보 표시
+    - 데이터 품질 확인
+    
+    사용처:
+    - 메인 실행부의 "👤 응답자 정보" 탭
+    - 기본 분석 모드의 첫 번째 탭
+    """
     st.subheader("👤 인구통계 문항 (SQ1 ~ 5 / BQ1 ~ 2)")
     soc_qs = [c for c in df.columns if c.startswith("SQ") or c.startswith("BQ")]
     for q in soc_qs:
@@ -2295,6 +2395,18 @@ def page_home(df):
             st.error(f"{q} 에러: {e}")
 
 def page_basic_vis(df):
+    """
+    기본 시각화 페이지 - 만족도 문항 분석
+    
+    기능:
+    - 7점 척도 만족도 문항 (Q1~Q8) 시각화
+    - 중분류별 점수 분석
+    - 레이더 차트 및 테이블 표시
+    
+    사용처:
+    - 메인 실행부의 "📈 만족도 기본 시각화" 탭
+    - 기본 분석 모드의 두 번째 탭
+    """
     st.subheader("📈 7점 척도 만족도 문항 (Q1 ~ Q8)")
     likert_qs = [
         col for col in df.columns
@@ -2415,6 +2527,18 @@ def safe_markdown(text, **kwargs):
     st.markdown(escaped, **kwargs)
 
 def page_segment_analysis(df):
+    """
+    이용자 세그먼트 조합 분석 페이지
+    
+    기능:
+    - 다양한 이용자 그룹의 특성 분석
+    - 세그먼트별 만족도 패턴 비교
+    - 조합별 심층 분석 및 인사이트 제공
+    
+    사용처:
+    - 메인 실행부의 심화 분석 모드
+    - 세그먼트별 맞춤 전략 수립
+    """
     st.header("🧩 이용자 세그먼트 조합 분석")
     st.markdown("""
     - SQ1~5, DQ1, DQ2, DQ4(1순위) 중 **최대 3개** 문항 선택  
