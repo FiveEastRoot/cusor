@@ -3266,7 +3266,7 @@ st.markdown(
 st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
 
 
-mode = st.sidebar.radio("LIBanalysiscusor", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
+mode = st.sidebar.radio("LIBanalysis", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
 if not uploaded:
