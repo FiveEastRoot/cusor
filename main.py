@@ -1086,7 +1086,20 @@ def extract_keyword_and_audience(responses, batch_size=32):
     return results
 
 def call_gpt_for_insight(prompt, model="gpt-4.1-mini", temperature=0.2, max_tokens=1500):
+    """
+    AI 인사이트 생성(프롬프트 유지, 캐시 + 세션 상태 적용)
+
+    - 프롬프트는 기존 로직 그대로 유지
+    - 동일 입력(모델/파라미터/프롬프트)에 대해 세션 캐시로 재호출 방지
+    - 재시도/백오프는 보수적으로 1회
+    """
     try:
+        if "_insight_cache" not in st.session_state:
+            st.session_state["_insight_cache"] = {}
+        cache_key = hashlib.sha256((model + str(temperature) + str(max_tokens) + prompt).encode()).hexdigest()
+        if cache_key in st.session_state["_insight_cache"]:
+            return st.session_state["_insight_cache"][cache_key]
+
         resp = client.chat.completions.create(
             model=model,
             messages=[
@@ -1097,6 +1110,7 @@ def call_gpt_for_insight(prompt, model="gpt-4.1-mini", temperature=0.2, max_toke
             max_tokens=max_tokens,
         )
         content = resp.choices[0].message.content.strip()
+        st.session_state["_insight_cache"][cache_key] = content
         return content
     except Exception as e:
         logging.warning(f"GPT 호출 실패: {e}")
@@ -3435,7 +3449,12 @@ elif mode == "심화 분석":
             within_item_scores,
             abc_df
         )
-        insight_overall = call_gpt_for_insight(prompt_overall)
+        # 버튼/세션 상태 기반: 사용자 요청 시에만 실행
+        if st.button("공통 심화 인사이트 생성", key="btn_overall_insight"):
+            insight_overall = call_gpt_for_insight(prompt_overall)
+            st.session_state["_last_overall_insight"] = insight_overall
+        else:
+            insight_overall = st.session_state.get("_last_overall_insight", "(버튼을 눌러 인사이트를 생성하세요)")
         insight_overall = insight_overall.replace("~", "-")
         render_insight_card("GPT 공통 심화 분석 요약 (전체)", insight_overall, key="common-overall-insight")
 
@@ -3460,7 +3479,11 @@ elif mode == "심화 분석":
             {k: float(v) for k, v in midcat_scores.items()},
             df_mean
         )
-        area_insight = call_gpt_for_insight(prompt_area)
+        if st.button("영역별 인사이트 생성", key="btn_area_insight"):
+            area_insight = call_gpt_for_insight(prompt_area)
+            st.session_state["_last_area_insight"] = area_insight
+        else:
+            area_insight = st.session_state.get("_last_area_insight", "(버튼을 눌러 인사이트를 생성하세요)")
         area_insight = area_insight.replace("~", "-")
         render_insight_card("GPT 공통 심화 분석 요약 (영역)", area_insight, key="common-area-insight")
 
