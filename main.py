@@ -669,8 +669,8 @@ def render_insight_card(title: str, content: str, key: str = None):
         components.html(html, height=height, key=key)
     except Exception as e:
         logging.warning(f"components.html failed for key={key}: {e}")
-        # Fallback so the user still sees something
-        st.markdown(f"**{title}**\n\n{content}")
+        # Fallback: 마크다운 렌더링 시 취소선(~) 방지를 위해 safe_markdown 사용
+        safe_markdown(f"**{title}**\n\n{content}")
 
 # =============================================================================
 # 7. 통계 분석 및 점수 계산 함수들
