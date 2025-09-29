@@ -3266,222 +3266,6 @@ st.markdown(
 st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
 
 
-# =============================================================================
-# 페이지 렌더 함수 모듈화 (실행부에서는 함수만 호출)
-# =============================================================================
-
-def page_district_module(df):
-    """
-    자치구 구성 문항(7점 척도/단문/장문) 하위 탭 렌더링
-    """
-    sub_tabs = st.tabs([
-        "7점 척도 시각화",
-        "단문 응답 분석",
-        "장문 서술형 분석"
-    ])
-    with sub_tabs[0]:
-        st.subheader("자치구 구성 문항 (7점 척도)")
-        subregion_cols = [c for c in df.columns if "Q9-D-" in c]
-        if not subregion_cols:
-            st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
-        else:
-            for idx, col in enumerate(subregion_cols):
-                bar, tbl = plot_stacked_bar_with_table(df, col)
-                render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
-
-    with sub_tabs[1]:
-        page_short_keyword(df)
-
-    with sub_tabs[2]:
-        st.subheader("장문 서술형 분석 (Q9-DS-5) — 주제/감성 기반 심층")
-        long_cols = [c for c in df.columns if "Q9-DS-5" in c]
-        if not long_cols:
-            st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
-        else:
-            raw_answers = df[long_cols[0]].dropna().astype(str).tolist()
-            clean_answers = get_clean_long_responses(raw_answers)
-            st.markdown(f"원본 응답: {len(raw_answers)}개 → 의미 있는 응답: {len(clean_answers)}개")
-            if not clean_answers:
-                st.info("분석할 내용이 없습니다.")
-            else:
-                if st.button("1. 주제/키워드/요약 추출"):
-                    with st.spinner("주제 추출 중..."):
-                        theme_df = extract_theme_table_long(clean_answers)
-                        st.success("주제 추출 완료")
-                        st.dataframe(theme_df, use_container_width=True)
-                        buf = io.BytesIO()
-                        theme_df.to_excel(buf, index=False)
-                        buf.seek(0)
-                        st.download_button(
-                            "표1_주제_키워드_요약.xlsx 다운로드",
-                            data=buf.getvalue(),
-                            file_name="표1_주제_키워드_요약.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-
-                    with st.spinner("감성 분석 중..."):
-                        sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
-                        st.success("감성 분석 완료")
-                        st.dataframe(sentiment_df, use_container_width=True)
-                        buf2 = io.BytesIO()
-                        sentiment_df.to_excel(buf2, index=False)
-                        buf2.seek(0)
-                        st.download_button(
-                            "표2_주제별_감성_요약.xlsx 다운로드",
-                            data=buf2.getvalue(),
-                            file_name="표2_주제별_감성_요약.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-
-
-def page_usage_patterns(df):
-    """도서관 이용양태 분석 하위 탭 렌더링"""
-    st.header("📊 도서관 이용양태 분석")
-    sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
-    with sub_tabs[0]:
-        fig1, tbl1, q1 = plot_dq1(df)
-        render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
-        fig2, tbl2, q2 = plot_dq2(df)
-        render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
-        fig3, tbl3, q3 = plot_dq3(df)
-        render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
-        fig4, tbl4, q4 = plot_dq4_bar(df)
-        render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
-        fig5, tbl5, q5 = plot_dq5(df)
-        render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
-    with sub_tabs[1]:
-        st.subheader("DQ6 계열 문항 분석")
-        dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
-        if not dq6_cols:
-            st.warning("DQ6 계열 문항이 없습니다.")
-        else:
-            for col in dq6_cols:
-                st.markdown(f"### {col}")
-                if col == dq6_cols[0]:
-                    multi = df[col].dropna().astype(str).str.split(',')
-                    exploded = multi.explode().str.strip()
-                    counts = exploded.value_counts()
-                    percent = (counts / counts.sum() * 100).round(1)
-                    fig = go.Figure(go.Bar(
-                        x=counts.values, y=counts.index,
-                        orientation='h', text=counts.values,
-                        textposition='outside', marker_color=get_qualitative_colors(len(counts))
-                    ))
-                    fig.update_layout(
-                        title=col,
-                        xaxis_title="응답 수",
-                        yaxis_title="서비스",
-                        height=400,
-                        margin=dict(t=50, b=100)
-                    )
-                    table_df = pd.DataFrame({'응답 수': counts, '비율 (%)': percent}).T
-                    render_chart_and_table(fig, table_df, col, key_prefix="dq6")
-                else:
-                    bar, tbl = plot_categorical_stacked_bar(df, col)
-                    render_chart_and_table(bar, tbl, col, key_prefix="dq6")
-
-
-def page_image_module(df):
-    """도서관 이미지 분석 렌더링"""
-    st.header("🖼️ 도서관 이미지 분석")
-    fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
-    if fig is not None:
-        render_chart_and_table(fig, tbl, "DQ7-E 이미지 분포", key_prefix="image-diverge")
-    else:
-        st.warning("DQ7-E 문항이 없습니다.")
-
-
-def page_strengths_weaknesses(df):
-    """도서관 강약점 분석 렌더링"""
-    st.header("🏋️ 도서관 강약점 분석")
-    fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
-    if fig8 is not None:
-        render_chart_and_table(fig8, tbl8, q8, key_prefix="strength")
-    else:
-        st.warning("DQ8 문항이 없습니다.")
-    fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
-    if fig9 is not None:
-        render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
-    else:
-        st.warning("DQ9 문항이 없습니다.")
-
-
-def page_deep_overall(df):
-    """공통 심화 분석(전체) 렌더링"""
-    st.header("🔍 공통 심화 분석(전체)")
-    st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
-    radar = plot_midcategory_radar(df)
-    if radar is not None:
-        st.plotly_chart(radar, use_container_width=True)
-        tbl_avg = midcategory_avg_table(df)
-        if not tbl_avg.empty:
-            show_table(tbl_avg, "중분류별 평균 점수")
-            st.markdown("---")
-        else:
-            st.warning("중분류 평균을 계산할 수 없습니다.")
-    else:
-        st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
-
-    st.subheader("중분류 내 문항별 편차")
-    mid_scores = compute_midcategory_scores(df)
-    if mid_scores.empty:
-        st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
-    else:
-        for mid in mid_scores.index:
-            fig, table_df = plot_within_category_bar(df, mid)
-            if fig is None:
-                continue
-            st.markdown(f"### {mid}")
-            st.plotly_chart(fig, use_container_width=True)
-            if table_df is not None:
-                show_table(table_df.reset_index().rename(columns={"index": "문항"}), f"{mid} 항목별 편차")
-                st.markdown("---")
-
-    # GPT 요약(전체)
-    overall_mid_scores = compute_midcategory_scores(df)
-    within_item_scores = compute_within_category_item_scores(df)
-    abc_df = get_abc_category_means(df)
-    prompt_overall = build_common_overall_insight_prompt(
-        {k: float(v) for k, v in overall_mid_scores.items()},
-        within_item_scores,
-        abc_df
-    )
-    if st.button("공통 심화 인사이트 생성", key="btn_overall_insight"):
-        insight_overall = call_gpt_for_insight(prompt_overall)
-        st.session_state["_last_overall_insight"] = insight_overall
-    else:
-        insight_overall = st.session_state.get("_last_overall_insight", "(버튼을 눌러 인사이트를 생성하세요)")
-    insight_overall = insight_overall.replace("~", "-")
-    render_insight_card("GPT 공통 심화 분석 요약 (전체)", insight_overall, key="common-overall-insight")
-
-
-def page_deep_area(df):
-    """공통 심화 분석(영역별 A/B/C 비교) 렌더링"""
-    st.header("🔍 공통 심화 분석(영역별 A/B/C 비교)")
-    df_mean = get_abc_category_means(df)
-    radar_fig = plot_abc_radar(df_mean)
-    bar_fig = plot_abc_grouped_bar(df_mean)
-    st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더 차트")
-    st.plotly_chart(radar_fig, use_container_width=True)
-    st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 묶음(bar) 차트")
-    st.plotly_chart(bar_fig, use_container_width=True)
-    st.markdown("#### 상세 데이터")
-    st.dataframe(df_mean)
-    df_mean = get_abc_category_means(df)
-    midcat_scores = compute_midcategory_scores(df)
-    prompt_area = build_area_insight_prompt(
-        {k: float(v) for k, v in midcat_scores.items()},
-        df_mean
-    )
-    if st.button("영역별 인사이트 생성", key="btn_area_insight"):
-        area_insight = call_gpt_for_insight(prompt_area)
-        st.session_state["_last_area_insight"] = area_insight
-    else:
-        area_insight = st.session_state.get("_last_area_insight", "(버튼을 눌러 인사이트를 생성하세요)")
-    area_insight = area_insight.replace("~", "-")
-    render_insight_card("GPT 공통 심화 분석 요약 (영역)", area_insight, key="common-area-insight")
-
-
 mode = st.sidebar.radio("LIBanalysis", ["기본 분석", "심화 분석", "전략 인사이트(기본)"])
 
 uploaded = st.file_uploader("📂 엑셀(.xlsx) 파일 업로드", type=["xlsx"])
@@ -3514,25 +3298,222 @@ if mode == "기본 분석":
 
     with tabs[2]:
         st.header("🗺️ 자치구 구성 문항 분석")
-        page_district_module(df)
+        sub_tabs = st.tabs([
+            "7점 척도 시각화",
+            "단문 응답 분석",
+            "장문 서술형 분석"
+        ])
+        with sub_tabs[0]:
+            st.subheader("자치구 구성 문항 (7점 척도)")
+            subregion_cols = [c for c in df.columns if "Q9-D-" in c]
+            if not subregion_cols:
+                st.error("Q9-D- 로 시작하는 문항을 찾을 수 없습니다.")
+            else:
+                for idx, col in enumerate(subregion_cols):
+                    bar, tbl = plot_stacked_bar_with_table(df, col)
+                    #st.markdown(f"##### {col}")
+                    render_chart_and_table(bar, tbl, col, key_prefix=f"subregion-{idx}")
+        with sub_tabs[1]:
+            page_short_keyword(df)
+        with sub_tabs[2]:
+            st.subheader("장문 서술형 분석 (Q9-DS-5) — 주제/감성 기반 심층")
+            long_cols = [c for c in df.columns if "Q9-DS-5" in c]
+            if not long_cols:
+                st.warning("Q9-DS-5 관련 문항을 찾을 수 없습니다.")
+            else:
+                raw_answers = df[long_cols[0]].dropna().astype(str).tolist()
+                clean_answers = get_clean_long_responses(raw_answers)
+                st.markdown(f"원본 응답: {len(raw_answers)}개 → 의미 있는 응답: {len(clean_answers)}개")
+                if not clean_answers:
+                    st.info("분석할 내용이 없습니다.")
+                else:
+                    if st.button("1. 주제/키워드/요약 추출"):
+                        with st.spinner("주제 추출 중..."):
+                            theme_df = extract_theme_table_long(clean_answers)
+                            st.success("주제 추출 완료")
+                            st.dataframe(theme_df, use_container_width=True)
+                            buf = io.BytesIO()
+                            theme_df.to_excel(buf, index=False)
+                            buf.seek(0)
+                            st.download_button(
+                                "표1_주제_키워드_요약.xlsx 다운로드",
+                                data=buf.getvalue(),
+                                file_name="표1_주제_키워드_요약.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+
+                        # 감성 테이블 다운로드 버튼 (수정된 부분)
+                        with st.spinner("감성 분석 중..."):
+                            sentiment_df = extract_sentiment_table_long(clean_answers, theme_df)
+                            st.success("감성 분석 완료")
+                            st.dataframe(sentiment_df, use_container_width=True)
+                            buf2 = io.BytesIO()
+                            sentiment_df.to_excel(buf2, index=False)
+                            buf2.seek(0)
+                            st.download_button(
+                                "표2_주제별_감성_요약.xlsx 다운로드",
+                                data=buf2.getvalue(),
+                                file_name="표2_주제별_감성_요약.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
 
 
     with tabs[3]:
-        page_usage_patterns(df)
+        st.header("📊 도서관 이용양태 분석")
+        sub_tabs = st.tabs(["DQ1~5", "DQ6 계열"])
+        with sub_tabs[0]:
+            fig1, tbl1, q1 = plot_dq1(df)
+            render_chart_and_table(fig1, tbl1, q1, key_prefix="dq1")
+
+            fig2, tbl2, q2 = plot_dq2(df)
+            render_chart_and_table(fig2, tbl2, q2, key_prefix="dq2")
+
+            fig3, tbl3, q3 = plot_dq3(df)
+            render_chart_and_table(fig3, tbl3, q3, key_prefix="dq3")
+
+            fig4, tbl4, q4 = plot_dq4_bar(df)
+            render_chart_and_table(fig4, tbl4, q4, key_prefix="dq4")
+
+            fig5, tbl5, q5 = plot_dq5(df)
+            render_chart_and_table(fig5, tbl5, q5, key_prefix="dq5")
+        with sub_tabs[1]:
+            st.subheader("DQ6 계열 문항 분석")
+            dq6_cols = [c for c in df.columns if c.startswith("DQ6")]
+            if not dq6_cols:
+                st.warning("DQ6 계열 문항이 없습니다.")
+            else:
+                for col in dq6_cols:
+                    st.markdown(f"### {col}")
+                    if col == dq6_cols[0]:
+                        multi = df[col].dropna().astype(str).str.split(',')
+                        exploded = multi.explode().str.strip()
+                        counts = exploded.value_counts()
+                        percent = (counts / counts.sum() * 100).round(1)
+
+                        fig = go.Figure(go.Bar(
+                            x=counts.values, y=counts.index,
+                            orientation='h', text=counts.values,
+                            textposition='outside', marker_color=get_qualitative_colors(len(counts))
+                        ))
+                        fig.update_layout(
+                            title=col,
+                            xaxis_title="응답 수",
+                            yaxis_title="서비스",
+                            height=400,
+                            margin=dict(t=50, b=100)
+                        )
+                        table_df = pd.DataFrame({
+                            '응답 수': counts,
+                            '비율 (%)': percent
+                        }).T
+                        render_chart_and_table(fig, table_df, col, key_prefix="dq6")
+                    else:
+                        bar, tbl = plot_categorical_stacked_bar(df, col)
+                        render_chart_and_table(bar, tbl, col, key_prefix="dq6")
 
     with tabs[4]:
-        page_image_module(df)
+        st.header("🖼️ 도서관 이미지 분석")
+        fig, tbl = plot_likert_diverging(df, prefix="DQ7-E")
+        if fig is not None:
+            render_chart_and_table(fig, tbl, "DQ7-E 이미지 분포", key_prefix="image-diverge")
+        else:
+            st.warning("DQ7-E 문항이 없습니다.")
 
     with tabs[5]:
-        page_strengths_weaknesses(df)
+        st.header("🏋️ 도서관 강약점 분석")
+        fig8, tbl8, q8 = plot_pair_bar(df, "DQ8")
+        if fig8 is not None:
+            render_chart_and_table(fig8, tbl8, q8, key_prefix="strength")
+        else:
+            st.warning("DQ8 문항이 없습니다.")
+        fig9, tbl9, q9 = plot_pair_bar(df, "DQ9")
+        if fig9 is not None:
+            render_chart_and_table(fig9, tbl9, q9, key_prefix="weakness")
+        else:
+            st.warning("DQ9 문항이 없습니다.")
 
 elif mode == "심화 분석":
     tabs = st.tabs(["공통 심화 분석(전체)", "공통 심화 분석(영역)", "이용자 세그먼트 조합 분석"])
     with tabs[0]:
-        page_deep_overall(df)
+        st.header("🔍 공통 심화 분석(전체)")
+        st.subheader("중분류별 전체 만족도 (레이더 차트 및 평균값)")
+        radar = plot_midcategory_radar(df)
+        if radar is not None:
+            st.plotly_chart(radar, use_container_width=True)
+            tbl_avg = midcategory_avg_table(df)
+            if not tbl_avg.empty:
+                show_table(tbl_avg, "중분류별 평균 점수")
+                st.markdown("---")
+            else:
+                st.warning("중분류 평균을 계산할 수 없습니다.")
+        else:
+            st.warning("필요한 문항이 없어 중분류 점수를 계산할 수 없습니다.")
+
+        st.subheader("중분류 내 문항별 편차")
+        mid_scores = compute_midcategory_scores(df)
+        if mid_scores.empty:
+            st.warning("중분류 문항이 없어 편차를 계산할 수 없습니다.")
+        else:
+            for mid in mid_scores.index:
+                fig, table_df = plot_within_category_bar(df, mid)
+                if fig is None:
+                    continue
+                st.markdown(f"### {mid}")
+                st.plotly_chart(fig, use_container_width=True)
+                if table_df is not None:
+                    show_table(
+                        table_df.reset_index().rename(columns={"index": "문항"}),
+                        f"{mid} 항목별 편차"
+                    )
+                    st.markdown("---")
+        # --- GPT 요약 (전체) 추가 ---
+        overall_mid_scores = compute_midcategory_scores(df)
+        within_item_scores = compute_within_category_item_scores(df)  # midcategory -> Series
+        abc_df = get_abc_category_means(df)
+
+        prompt_overall = build_common_overall_insight_prompt(
+            {k: float(v) for k, v in overall_mid_scores.items()},
+            within_item_scores,
+            abc_df
+        )
+        # 버튼/세션 상태 기반: 사용자 요청 시에만 실행
+        if st.button("공통 심화 인사이트 생성", key="btn_overall_insight"):
+            insight_overall = call_gpt_for_insight(prompt_overall)
+            st.session_state["_last_overall_insight"] = insight_overall
+        else:
+            insight_overall = st.session_state.get("_last_overall_insight", "(버튼을 눌러 인사이트를 생성하세요)")
+        insight_overall = insight_overall.replace("~", "-")
+        render_insight_card("GPT 공통 심화 분석 요약 (전체)", insight_overall, key="common-overall-insight")
 
     with tabs[1]:
-        page_deep_area(df)
+        st.header("🔍 공통 심화 분석(영역별 A/B/C 비교)")
+        df_mean = get_abc_category_means(df)
+        radar_fig = plot_abc_radar(df_mean)
+        bar_fig = plot_abc_grouped_bar(df_mean)
+
+        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 레이더 차트")
+        st.plotly_chart(radar_fig, use_container_width=True)
+
+        st.subheader("중분류별 서비스 평가/효과/만족도 (A/B/C) 묶음(bar) 차트")
+        st.plotly_chart(bar_fig, use_container_width=True)
+
+        st.markdown("#### 상세 데이터")
+        st.dataframe(df_mean)
+        df_mean = get_abc_category_means(df)
+        # --- GPT 요약 (영역) 추가 ---
+        midcat_scores = compute_midcategory_scores(df)
+        prompt_area = build_area_insight_prompt(
+            {k: float(v) for k, v in midcat_scores.items()},
+            df_mean
+        )
+        if st.button("영역별 인사이트 생성", key="btn_area_insight"):
+            area_insight = call_gpt_for_insight(prompt_area)
+            st.session_state["_last_area_insight"] = area_insight
+        else:
+            area_insight = st.session_state.get("_last_area_insight", "(버튼을 눌러 인사이트를 생성하세요)")
+        area_insight = area_insight.replace("~", "-")
+        render_insight_card("GPT 공통 심화 분석 요약 (영역)", area_insight, key="common-area-insight")
+
 
     with tabs[2]:
         page_segment_analysis(df)
