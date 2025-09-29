@@ -3238,7 +3238,7 @@ def show_basic_strategy_insights(df):
 
 # Streamlit 페이지 설정
 st.set_page_config(
-    page_title="LIBanalysiscusor - 공공도서관 설문 시각화 대시보드",
+    page_title="LIBanalysis - 공공도서관 설문 시각화 대시보드",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -3257,7 +3257,7 @@ st.markdown(
         text-align: center;
         border-bottom: 2px solid #eee;
     ">
-        <h1 style="margin: 0; font-size: 3rem; font-weight: bold;">LIBanalysiscusor</h1>
+        <h1 style="margin: 0; font-size: 3rem; font-weight: bold;">LIB analysis</h1>
     </div>
     """,
     unsafe_allow_html=True
