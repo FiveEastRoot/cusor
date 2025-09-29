@@ -3492,6 +3492,30 @@ if not uploaded:
 try:
     df = pd.read_excel(uploaded)
     st.success("✅ 업로드 완료")
+    # 업로드 파일 변경 시 세션/캐시 초기화: 이전 데이터 잔존 방지
+    try:
+        file_bytes = uploaded.getvalue()
+    except Exception:
+        file_bytes = None
+    if file_bytes is not None:
+        current_file_hash = hashlib.sha256(file_bytes).hexdigest()
+        last_file_hash = st.session_state.get("_last_file_hash")
+        if last_file_hash != current_file_hash:
+            st.session_state["_last_file_hash"] = current_file_hash
+            # 세션 기반 캐시/최근 결과 초기화
+            for k in [
+                "_last_overall_insight",
+                "_last_area_insight",
+                "_insight_cache",
+                "_llm_cache",
+            ]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            # 함수 캐시 초기화
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
 except Exception as e:
     st.error(f"파일 읽기 실패: {e}")
     st.stop()
