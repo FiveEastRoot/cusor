@@ -3489,39 +3489,58 @@ if not uploaded:
     st.info("데이터 파일을 업로드해 주세요.")
     st.stop()
 
+# 업로드 파일로부터 바이트 확보 (시트 선택 지원을 위해 메모리 버퍼 사용)
 try:
-    df = pd.read_excel(uploaded)
-    st.success("✅ 업로드 완료")
-    # 업로드 파일 변경 시 세션/캐시 초기화: 이전 데이터 잔존 방지
+    _uploaded_bytes = uploaded.getvalue()
+except Exception:
+    _uploaded_bytes = None
+
+if _uploaded_bytes is None:
+    st.error("업로드된 파일을 읽을 수 없습니다.")
+    st.stop()
+
+# 시트 선택 UI
+try:
+    _xls = pd.ExcelFile(io.BytesIO(_uploaded_bytes))
+    _sheet_names = _xls.sheet_names
+except Exception:
+    _sheet_names = None
+
+if not _sheet_names:
+    st.error("엑셀 시트를 확인할 수 없습니다.")
+    st.stop()
+
+selected_sheet = st.selectbox("시트 선택", _sheet_names, key="_sheet_select")
+
+# 파일+시트 조합 해시로 세션/캐시 초기화 제어
+_data_key = hashlib.sha256(_uploaded_bytes + selected_sheet.encode("utf-8")).hexdigest()
+_last_data_key = st.session_state.get("_last_data_key")
+if _last_data_key != _data_key:
+    st.session_state["_last_data_key"] = _data_key
+    # 1) 세션 상태 전체 초기화(데이터 키만 보존)
+    keys_to_preserve = {"_last_data_key"}
+    for _k in list(st.session_state.keys()):
+        if _k not in keys_to_preserve:
+            try:
+                del st.session_state[_k]
+            except Exception:
+                pass
+    # 2) 함수/리소스 캐시 초기화
     try:
-        file_bytes = uploaded.getvalue()
+        st.cache_data.clear()
     except Exception:
-        file_bytes = None
-    if file_bytes is not None:
-        current_file_hash = hashlib.sha256(file_bytes).hexdigest()
-        last_file_hash = st.session_state.get("_last_file_hash")
-        if last_file_hash != current_file_hash:
-            # 새 파일 해시 기록
-            st.session_state["_last_file_hash"] = current_file_hash
-            # 1) 세션 상태 전체 초기화(해시만 보존)
-            keys_to_preserve = {"_last_file_hash"}
-            for _k in list(st.session_state.keys()):
-                if _k not in keys_to_preserve:
-                    try:
-                        del st.session_state[_k]
-                    except Exception:
-                        pass
-            # 2) 함수/리소스 캐시 초기화
-            try:
-                st.cache_data.clear()
-            except Exception:
-                pass
-            try:
-                st.cache_resource.clear()
-            except Exception:
-                pass
-            # 3) 즉시 재실행으로 깨끗한 상태 보장 (Streamlit 1.27+)
-            st.rerun()
+        pass
+    try:
+        st.cache_resource.clear()
+    except Exception:
+        pass
+    # 3) 즉시 재실행으로 깨끗한 상태 보장
+    st.rerun()
+
+# 선택된 시트 로드
+try:
+    df = pd.read_excel(io.BytesIO(_uploaded_bytes), sheet_name=selected_sheet)
+    st.success(f"✅ 업로드 완료 (시트: {selected_sheet})")
 except Exception as e:
     st.error(f"파일 읽기 실패: {e}")
     st.stop()
