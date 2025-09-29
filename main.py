@@ -3501,21 +3501,27 @@ try:
         current_file_hash = hashlib.sha256(file_bytes).hexdigest()
         last_file_hash = st.session_state.get("_last_file_hash")
         if last_file_hash != current_file_hash:
+            # 새 파일 해시 기록
             st.session_state["_last_file_hash"] = current_file_hash
-            # 세션 기반 캐시/최근 결과 초기화
-            for k in [
-                "_last_overall_insight",
-                "_last_area_insight",
-                "_insight_cache",
-                "_llm_cache",
-            ]:
-                if k in st.session_state:
-                    del st.session_state[k]
-            # 함수 캐시 초기화
+            # 1) 세션 상태 전체 초기화(해시만 보존)
+            keys_to_preserve = {"_last_file_hash"}
+            for _k in list(st.session_state.keys()):
+                if _k not in keys_to_preserve:
+                    try:
+                        del st.session_state[_k]
+                    except Exception:
+                        pass
+            # 2) 함수/리소스 캐시 초기화
             try:
                 st.cache_data.clear()
             except Exception:
                 pass
+            try:
+                st.cache_resource.clear()
+            except Exception:
+                pass
+            # 3) 즉시 재실행으로 깨끗한 상태 보장
+            st.experimental_rerun()
 except Exception as e:
     st.error(f"파일 읽기 실패: {e}")
     st.stop()
