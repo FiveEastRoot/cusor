@@ -548,6 +548,7 @@ def is_meaningful_long(text: str) -> bool:
             return False
     return True
 
+@st.cache_data(show_spinner=False)
 def get_clean_long_responses(raw: list[str]) -> list[str]:
     return [r for r in raw if is_meaningful_long(r)]
 
@@ -728,6 +729,7 @@ MIDDLE_CATEGORY_MAPPING = {
     "도서관의 공익성 및 기여도": lambda col: (str(col).startswith("Q7-") or str(col).startswith("Q8")),
 }
 
+@st.cache_data(show_spinner=False)
 def compute_midcategory_scores(df):
     """
     중분류별 평균 점수를 계산하는 핵심 함수
@@ -754,6 +756,7 @@ def compute_midcategory_scores(df):
         results[mid] = mid_mean
     return pd.Series(results).dropna()
 
+@st.cache_data(show_spinner=False)
 def compute_within_category_item_scores(df):
     item_scores = {}
     for mid, predicate in MIDDLE_CATEGORY_MAPPING.items():
@@ -990,6 +993,7 @@ def compare_midcategory_by_group(df, group_col):
     return results
 
 
+@st.cache_data(show_spinner=False)
 def process_answers(responses):
     expanded = []
     for ans in responses:
