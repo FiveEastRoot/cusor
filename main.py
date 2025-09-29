@@ -3520,8 +3520,8 @@ try:
                 st.cache_resource.clear()
             except Exception:
                 pass
-            # 3) 즉시 재실행으로 깨끗한 상태 보장
-            st.experimental_rerun()
+            # 3) 즉시 재실행으로 깨끗한 상태 보장 (Streamlit 1.27+)
+            st.rerun()
 except Exception as e:
     st.error(f"파일 읽기 실패: {e}")
     st.stop()
